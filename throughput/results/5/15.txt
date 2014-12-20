@@ -1,0 +1,74 @@
+BEGIN;
+BEGIN
+create or replace view revenue5 (supplier_no, total_revenue) as
+	select
+		l_suppkey,
+		sum(l_extendedprice * (1 - l_discount))
+	from
+		lineitem
+	where
+		l_shipdate >= '1993-03-01'
+		and l_shipdate < date'1993-03-01' + interval '90 days'
+	group by
+		l_suppkey;
+CREATE VIEW
+EXPLAIN (ANALYZE, BUFFERS)
+select
+	s_suppkey,
+	s_name,
+	s_address,
+	s_phone,
+	total_revenue
+from
+	supplier,
+	revenue5
+where
+	s_suppkey = supplier_no
+	and total_revenue = (
+		select
+			max(total_revenue)
+		from
+			revenue5
+	)
+order by
+	s_suppkey;
+                                                                       QUERY PLAN                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+ Merge Join  (cost=4000064.69..4005161.62 rows=3715 width=79) (actual time=43056.161..43056.163 rows=1 loops=1)
+   Merge Cond: (supplier.s_suppkey = revenue5.supplier_no)
+   Buffers: shared hit=1113466 read=1023390 written=7
+   InitPlan 1 (returns $0)
+     ->  Aggregate  (cost=1991547.28..1991547.29 rows=1 width=8) (actual time=20983.829..20983.830 rows=1 loops=1)
+           Buffers: shared hit=507028 read=560515
+           ->  HashAggregate  (cost=1991463.69..1991500.84 rows=3715 width=12) (actual time=20931.341..20972.602 rows=100000 loops=1)
+                 Group Key: lineitem_1.l_suppkey
+                 Buffers: shared hit=507028 read=560515
+                 ->  Seq Scan on lineitem lineitem_1  (cost=0.00..1969130.96 rows=2233273 width=12) (actual time=0.023..18940.743 rows=2249760 loops=1)
+                       Filter: ((l_shipdate >= '1993-03-01'::date) AND (l_shipdate < '1993-05-30 00:00:00'::timestamp without time zone))
+                       Rows Removed by Filter: 57795843
+                       Buffers: shared hit=507028 read=560515
+   ->  Index Scan using pk_supplier on supplier  (cost=0.29..4791.49 rows=100000 width=71) (actual time=0.022..19.048 rows=64983 loops=1)
+         Buffers: shared hit=1770
+   ->  Sort  (cost=2008517.11..2008526.40 rows=3715 width=12) (actual time=43030.724..43030.725 rows=1 loops=1)
+         Sort Key: revenue5.supplier_no
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=1111696 read=1023390 written=7
+         ->  Subquery Scan on revenue5  (cost=2008213.24..2008296.82 rows=3715 width=12) (actual time=43015.793..43030.705 rows=1 loops=1)
+               Buffers: shared hit=1111696 read=1023390 written=7
+               ->  HashAggregate  (cost=2008213.24..2008259.68 rows=3715 width=12) (actual time=43015.792..43030.703 rows=1 loops=1)
+                     Group Key: lineitem.l_suppkey
+                     Filter: (sum((lineitem.l_extendedprice * (1::double precision - lineitem.l_discount))) = $0)
+                     Rows Removed by Filter: 99999
+                     Buffers: shared hit=1111696 read=1023390 written=7
+                     ->  Seq Scan on lineitem  (cost=0.00..1969130.96 rows=2233273 width=12) (actual time=0.019..19818.727 rows=2249760 loops=1)
+                           Filter: ((l_shipdate >= '1993-03-01'::date) AND (l_shipdate < '1993-05-30 00:00:00'::timestamp without time zone))
+                           Rows Removed by Filter: 57795843
+                           Buffers: shared hit=604668 read=462875 written=7
+ Planning time: 4.674 ms
+ Execution time: 43058.315 ms
+(32 rows)
+
+drop view revenue5;
+DROP VIEW
+COMMIT;
+COMMIT
